@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <title>六年级认读游戏</title>
+  <style>
+    body { font-family: sans-serif; text-align: center; padding: 20px; }
+    button { padding: 10px 20px; font-size: 16px; margin: 10px; }
+    #wordDisplay { font-size: 32px; margin: 20px; }
+    #scoreBoard, #leaderboard, #timer { margin-top: 20px; font-size: 18px; }
+    #correctPronunciation { display: none; }
+  </style>
+</head>
+<body>
+  <h1>六年级认读游戏</h1>
+  <p>请把显示的字读出来</p>
+
+  <button id="testMic">测试麦克风</button>
+  <button id="startGame">开始游戏</button>
+  <div id="timer">剩余时间：90 秒</div>
+  <div id="scoreBoard">当前得分：0</div>
+
+  <div id="wordDisplay"></div>
+  <button id="nextBtn" disabled>下一题</button>
+  <div id="feedback"></div>
+  <button id="correctPronunciation">正确读音</button>
+
+  <div id="finalResult" style="margin-top:20px;"></div>
+  <div id="leaderboard">
+    <h2>得分榜</h2>
+    <ol id="scoreList"></ol>
+  </div>
+  <button id="restartBtn" style="display:none;">重新开始</button>
+
+  <script>
+    const words = [
+      "压力很大", "勤奋学习", "克服困难", "订好复习计划", "锻炼身体",
+      "景色优美", "勇敢面对", "被它吸引住了", "常做恶梦", "颜色鲜艳",
+      "狂风阵阵", "树立好榜样"
+    ];
+    let shuffled = [], currentWord = "", currentScore = 0, timer = 90, interval;
+    let index = 0, recognition, recognizing = false;
+    let leaderboard = JSON.parse(localStorage.getItem("leaderboard") || "[]");
+
+    const wordDisplay = document.getElementById("wordDisplay");
+    const nextBtn = document.getElementById("nextBtn");
+    const feedback = document.getElementById("feedback");
+    const correctBtn = document.getElementById("correctPronunciation");
+    const timerEl = document.getElementById("timer");
+    const scoreBoard = document.getElementById("scoreBoard");
+    const scoreList = document.getElementById("scoreList");
+    const finalResult = document.getElementById("finalResult");
+    const restartBtn = document.getElementById("restartBtn");
+
+    function updateLeaderboard() {
+      scoreList.innerHTML = leaderboard.map(entry =>
+        `<li>${entry.name}: ${entry.score}分，剩余${entry.time}秒</li>`
+      ).join("");
+    }
+
+    function shuffle(array) {
+      return [...array].sort(() => 0.5 - Math.random());
+    }
+
+    function startTimer() {
+      interval = setInterval(() => {
+        timer--;
+        timerEl.textContent = `剩余时间：${timer} 秒`;
+        if (timer <= 0) endGame();
+      }, 1000);
+    }
+
+    function speakWord(word) {
+      const utter = new SpeechSynthesisUtterance(word);
+      utter.lang = 'zh-CN';
+      speechSynthesis.speak(utter);
+    }
+
+    function nextQuestion() {
+      if (index >= 10) return endGame();
+      currentWord = shuffled[index++];
+      wordDisplay.textContent = currentWord;
+      feedback.textContent = "";
+      correctBtn.style.display = "none";
+      startRecognition();
+    }
+
+    function startRecognition() {
+      if (!recognition) return;
+      recognition.start();
+    }
+
+    function endGame() {
+      clearInterval(interval);
+      recognition && recognition.stop();
+      nextBtn.disabled = true;
+      finalResult.innerHTML = `<p>得分：${currentScore}</p><p>所剩时间：${timer} 秒</p>`;
+      const name = prompt("请输入你的名字：");
+      if (name) {
+        leaderboard.push({ name, score: currentScore, time: timer, ts: Date.now() });
+        leaderboard.sort((a, b) => b.score - a.score || b.time - a.time || b.ts - a.ts);
+        leaderboard = leaderboard.slice(0, 10);
+        localStorage.setItem("leaderboard", JSON.stringify(leaderboard));
+        updateLeaderboard();
+      }
+      restartBtn.style.display = "inline";
+    }
+
+    function initRecognition() {
+      recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
+      recognition.lang = 'zh-CN';
+      recognition.interimResults = false;
+      recognition.maxAlternatives = 1;
+      recognition.onresult = (event) => {
+        const result = event.results[0][0].transcript.trim();
+        if (result === currentWord) {
+          currentScore += 10;
+          feedback.textContent = "恭喜你！读对了！";
+        } else {
+          feedback.textContent = "加油！";
+          correctBtn.style.display = "inline";
+        }
+        scoreBoard.textContent = `当前得分：${currentScore}`;
+      };
+      recognition.onerror = () => feedback.textContent = "语音识别错误，请重试。";
+    }
+
+    document.getElementById("testMic").onclick = () => {
+      if (!recognition) initRecognition();
+      recognition.start();
+    };
+
+    document.getElementById("startGame").onclick = () => {
+      shuffled = shuffle(words).slice(0, 10);
+      index = 0;
+      currentScore = 0;
+      timer = 90;
+      finalResult.textContent = "";
+      restartBtn.style.display = "none";
+      scoreBoard.textContent = `当前得分：0`;
+      timerEl.textContent = `剩余时间：90 秒`;
+      if (!recognition) initRecognition();
+      startTimer();
+      nextBtn.disabled = false;
+      nextQuestion();
+    };
+
+    nextBtn.onclick = () => {
+      if (recognition) recognition.abort();
+      nextQuestion();
+    };
+
+    correctBtn.onclick = () => speakWord(currentWord);
+    restartBtn.onclick = () => location.reload();
+
+    updateLeaderboard();
+  </script>
+</body>
+</html>
